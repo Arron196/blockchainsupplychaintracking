@@ -13,7 +13,7 @@ This benchmark provides a reproducible baseline for `backend-cpp` ingest behavio
 - Fixed payload generation (no randomness).
 - Fixed base timestamp (`1700002000`) with sequential increments.
 - Fixed `pubKeyId` (`pubkey-1`) and batch code (`BENCHMARK-QA-M1`).
-- Fixed benchmark key material (`tools/qa/keys/private/pubkey-1-test-private.pem`) aligned with `backend-cpp/keys/public/pubkey-1.pem`.
+- Ephemeral benchmark key material generated per run under `tools/qa/artifacts/keys/`.
 
 ## Run
 
@@ -33,7 +33,7 @@ tools/qa/run_ingest_benchmark.sh --output tools/qa/artifacts/m1_run.json --reque
 
 Default artifact path:
 
-- `tools/qa/artifacts/ingest_mock_baseline.json`
+- `tools/qa/artifacts/ingest_run_<timestamp>.json`
 
 The JSON artifact includes:
 

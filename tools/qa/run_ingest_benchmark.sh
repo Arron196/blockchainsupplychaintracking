@@ -13,7 +13,7 @@ PUBLIC_KEY_DIR="${KEY_DIR}/public"
 PUBLIC_KEY_PATH="${PUBLIC_KEY_DIR}/pubkey-1.pem"
 PRIVATE_KEY_PATH="${KEY_DIR}/pubkey-1-test-private.pem"
 
-OUTPUT_PATH="${ARTIFACT_DIR}/ingest_mock_baseline.json"
+OUTPUT_PATH="${ARTIFACT_DIR}/ingest_run_$(date +%Y%m%d_%H%M%S).json"
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -69,13 +69,18 @@ cleanup() {
 trap cleanup EXIT
 
 for _ in $(seq 1 80); do
-  if curl --silent --fail "http://127.0.0.1:8080/health" >/dev/null; then
+  if ! kill -0 "${SERVER_PID}" 2>/dev/null; then
+    echo "gateway exited before becoming healthy; see ${SERVER_LOG}" >&2
+    exit 1
+  fi
+
+  if curl --silent --fail --connect-timeout 1 --max-time 1 "http://127.0.0.1:8080/health" >/dev/null; then
     break
   fi
   sleep 0.25
 done
 
-if ! curl --silent --fail "http://127.0.0.1:8080/health" >/dev/null; then
+if ! curl --silent --fail --connect-timeout 1 --max-time 1 "http://127.0.0.1:8080/health" >/dev/null; then
   echo "gateway did not become healthy; see ${SERVER_LOG}" >&2
   exit 1
 fi

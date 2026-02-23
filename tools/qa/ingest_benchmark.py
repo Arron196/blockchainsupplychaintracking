@@ -53,6 +53,9 @@ def percentile(sorted_values: list[float], p: float) -> float:
 
 
 def sign_hash_hex(hash_hex: str, private_key_path: Path) -> str:
+    if subprocess.run(["openssl", "version"], capture_output=True, check=False).returncode != 0:
+        raise RuntimeError("openssl command is unavailable or not functional")
+
     result = subprocess.run(
         ["openssl", "dgst", "-sha256", "-sign", str(private_key_path), "-binary"],
         input=hash_hex.encode("utf-8"),
@@ -92,7 +95,7 @@ def build_packet(index: int, base_timestamp: int, private_key_path: Path) -> dic
 
 
 def post_json(url: str, payload: dict[str, Any], timeout_sec: float) -> tuple[int, dict[str, Any], float]:
-    data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    data = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     request = urllib.request.Request(
         url,
         data=data,

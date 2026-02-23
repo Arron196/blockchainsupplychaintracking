@@ -54,7 +54,6 @@ app_main_status_t app_main_prepare_packet(
             &sample) != 0) {
         return APP_MAIN_STATUS_PACKET_FAILURE;
     }
-    state->next_timestamp_sec += 1U;
 
     if (telemetry_packet_canonicalize(
             packet,
@@ -87,18 +86,20 @@ app_main_status_t app_main_prepare_packet(
         return APP_MAIN_STATUS_SIGN_FAILURE;
     }
 
+    state->next_timestamp_sec += 1U;
+
     return APP_MAIN_STATUS_OK;
 }
 
 comm_status_t app_main_send_canonical(
-    app_transport_t transport,
+    const app_main_t *state,
     const char *payload,
     size_t payload_len) {
-    if (payload == 0 || payload_len == 0U) {
+    if (state == 0 || payload == 0 || payload_len == 0U) {
         return COMM_STATUS_INVALID_ARGUMENT;
     }
 
-    if (transport == APP_TRANSPORT_WIFI) {
+    if (state->transport == APP_TRANSPORT_WIFI) {
         return comm_wifi_send((const uint8_t *)payload, payload_len);
     }
 

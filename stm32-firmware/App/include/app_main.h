@@ -41,7 +41,7 @@ app_main_status_t app_main_prepare_packet(
     size_t *canonical_written_len);
 
 comm_status_t app_main_send_canonical(
-    app_transport_t transport,
+    const app_main_t *state,
     const char *payload,
     size_t payload_len);
 

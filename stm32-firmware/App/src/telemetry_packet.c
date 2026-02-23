@@ -19,7 +19,9 @@ int telemetry_packet_init(
 
     device_id_len = strlen(device_id);
     pub_key_id_len = strlen(pub_key_id);
-    if (device_id_len > TELEMETRY_DEVICE_ID_MAX_LEN ||
+    if (device_id_len == 0U ||
+        pub_key_id_len == 0U ||
+        device_id_len > TELEMETRY_DEVICE_ID_MAX_LEN ||
         pub_key_id_len > TELEMETRY_PUB_KEY_ID_MAX_LEN) {
         return -1;
     }
@@ -47,11 +49,11 @@ int telemetry_packet_canonicalize(
     write_count = snprintf(
         output,
         output_len,
-        "deviceId=%s;timestamp=%" PRIu32
-        ";tempCenti=%" PRId32
-        ";humidityCenti=%" PRIu32
-        ";co2ppm=%" PRIu32
-        ";soilPhCenti=%" PRIu32,
+        "%s|%" PRIu32
+        "|{\"temperatureCenti\":%" PRId32
+        ",\"humidityCenti\":%" PRIu32
+        ",\"co2ppm\":%" PRIu32
+        ",\"soilPhCenti\":%" PRIu32 "}",
         packet->device_id,
         packet->timestamp_sec,
         packet->sample.temperature_centi_c,

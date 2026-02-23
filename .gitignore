@@ -21,6 +21,7 @@ frontend/.vite/
 frontend/.cache/
 backend-cpp/.cache/
 backend-cpp/data/*.db
+tools/qa/keys/private/
 backend-cpp/out/
 backend-cpp/cmake-build-*/
 stm32-firmware/**/Debug/

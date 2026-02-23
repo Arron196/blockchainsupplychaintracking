@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--private-key",
-        default="tools/qa/keys/private/pubkey-1-test-private.pem",
+        default="tools/qa/artifacts/keys/pubkey-1-test-private.pem",
         help="ECDSA private key path used for deterministic test workload",
     )
     return parser.parse_args()

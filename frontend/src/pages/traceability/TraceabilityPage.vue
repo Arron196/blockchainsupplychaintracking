@@ -33,9 +33,6 @@ const submitBatchLookup = async (): Promise<void> => {
   }
 };
 
-// Biome does not analyze Vue template references.
-const templateBindings = { hasRecords, submitBatchLookup };
-void templateBindings;
 </script>
 
 <template>
@@ -58,7 +55,7 @@ void templateBindings;
         <button class="btn" :disabled="loading" type="submit">{{ loading ? "Searching..." : "Query Trace" }}</button>
       </form>
 
-      <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+      <p v-if="errorMessage" class="error" aria-live="polite">{{ errorMessage }}</p>
 
       <div v-if="result" class="result-summary">
         <p>

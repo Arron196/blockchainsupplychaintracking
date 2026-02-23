@@ -168,6 +168,7 @@ onUnmounted(() => {
     alertRetryTimer = null;
   }
   telemetrySocket?.close();
+  telemetrySocket = null;
   alertSocket?.close();
   alertSocket = null;
 });
@@ -181,8 +182,8 @@ onUnmounted(() => {
       <p class="muted">Telemetry stream: {{ formatSocketState(telemetrySocketState) }}</p>
       <p class="muted">Alert stream: {{ formatSocketState(alertSocketState) }}</p>
       <button class="btn" type="button" @click="loadMetrics">Refresh snapshot</button>
-      <p v-if="loadError" class="error">{{ loadError }}</p>
-      <p v-if="socketErrorBanner" class="error">{{ socketErrorBanner }}</p>
+      <p v-if="loadError" class="error" aria-live="polite">{{ loadError }}</p>
+      <p v-if="socketErrorBanner" class="error" aria-live="polite">{{ socketErrorBanner }}</p>
     </div>
 
     <template v-if="metrics && !loading">

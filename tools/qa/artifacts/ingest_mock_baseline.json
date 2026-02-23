@@ -1,0 +1,592 @@
+{
+  "benchmark": "backend-cpp ingest success-rate/latency baseline",
+  "mode": "mock",
+  "deterministicWorkload": {
+    "requests": 80,
+    "baseTimestamp": 1700002000,
+    "pubKeyId": "pubkey-1",
+    "batchCode": "BENCHMARK-QA-M1"
+  },
+  "clientResults": {
+    "totalRequests": 80,
+    "acceptedRequests": 80,
+    "rejectedRequests": 0,
+    "successRate": 1.0,
+    "latencyMs": {
+      "min": 2.001,
+      "max": 18.145,
+      "avg": 2.6,
+      "p50": 2.353,
+      "p95": 2.993
+    }
+  },
+  "serverMetrics": {
+    "totalRequests": 80,
+    "acceptedRequests": 80,
+    "rejectedRequests": 0,
+    "averageProcessingMs": 0,
+    "repositorySize": 80
+  },
+  "perRequest": [
+    {
+      "index": 0,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 18.145,
+      "message": "accepted"
+    },
+    {
+      "index": 1,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.315,
+      "message": "accepted"
+    },
+    {
+      "index": 2,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.556,
+      "message": "accepted"
+    },
+    {
+      "index": 3,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.1,
+      "message": "accepted"
+    },
+    {
+      "index": 4,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.235,
+      "message": "accepted"
+    },
+    {
+      "index": 5,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.297,
+      "message": "accepted"
+    },
+    {
+      "index": 6,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.554,
+      "message": "accepted"
+    },
+    {
+      "index": 7,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.348,
+      "message": "accepted"
+    },
+    {
+      "index": 8,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.991,
+      "message": "accepted"
+    },
+    {
+      "index": 9,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.634,
+      "message": "accepted"
+    },
+    {
+      "index": 10,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.441,
+      "message": "accepted"
+    },
+    {
+      "index": 11,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.323,
+      "message": "accepted"
+    },
+    {
+      "index": 12,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 3.341,
+      "message": "accepted"
+    },
+    {
+      "index": 13,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.251,
+      "message": "accepted"
+    },
+    {
+      "index": 14,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.682,
+      "message": "accepted"
+    },
+    {
+      "index": 15,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.46,
+      "message": "accepted"
+    },
+    {
+      "index": 16,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.379,
+      "message": "accepted"
+    },
+    {
+      "index": 17,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.452,
+      "message": "accepted"
+    },
+    {
+      "index": 18,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.123,
+      "message": "accepted"
+    },
+    {
+      "index": 19,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.062,
+      "message": "accepted"
+    },
+    {
+      "index": 20,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.001,
+      "message": "accepted"
+    },
+    {
+      "index": 21,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.441,
+      "message": "accepted"
+    },
+    {
+      "index": 22,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.604,
+      "message": "accepted"
+    },
+    {
+      "index": 23,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.183,
+      "message": "accepted"
+    },
+    {
+      "index": 24,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.442,
+      "message": "accepted"
+    },
+    {
+      "index": 25,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.273,
+      "message": "accepted"
+    },
+    {
+      "index": 26,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.377,
+      "message": "accepted"
+    },
+    {
+      "index": 27,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.165,
+      "message": "accepted"
+    },
+    {
+      "index": 28,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.317,
+      "message": "accepted"
+    },
+    {
+      "index": 29,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.305,
+      "message": "accepted"
+    },
+    {
+      "index": 30,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.17,
+      "message": "accepted"
+    },
+    {
+      "index": 31,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.546,
+      "message": "accepted"
+    },
+    {
+      "index": 32,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.284,
+      "message": "accepted"
+    },
+    {
+      "index": 33,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.428,
+      "message": "accepted"
+    },
+    {
+      "index": 34,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.163,
+      "message": "accepted"
+    },
+    {
+      "index": 35,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.251,
+      "message": "accepted"
+    },
+    {
+      "index": 36,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.246,
+      "message": "accepted"
+    },
+    {
+      "index": 37,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.447,
+      "message": "accepted"
+    },
+    {
+      "index": 38,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.061,
+      "message": "accepted"
+    },
+    {
+      "index": 39,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.359,
+      "message": "accepted"
+    },
+    {
+      "index": 40,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.232,
+      "message": "accepted"
+    },
+    {
+      "index": 41,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.1,
+      "message": "accepted"
+    },
+    {
+      "index": 42,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.162,
+      "message": "accepted"
+    },
+    {
+      "index": 43,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.621,
+      "message": "accepted"
+    },
+    {
+      "index": 44,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.26,
+      "message": "accepted"
+    },
+    {
+      "index": 45,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.529,
+      "message": "accepted"
+    },
+    {
+      "index": 46,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.548,
+      "message": "accepted"
+    },
+    {
+      "index": 47,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.738,
+      "message": "accepted"
+    },
+    {
+      "index": 48,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.375,
+      "message": "accepted"
+    },
+    {
+      "index": 49,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.686,
+      "message": "accepted"
+    },
+    {
+      "index": 50,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.4,
+      "message": "accepted"
+    },
+    {
+      "index": 51,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.609,
+      "message": "accepted"
+    },
+    {
+      "index": 52,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.347,
+      "message": "accepted"
+    },
+    {
+      "index": 53,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.139,
+      "message": "accepted"
+    },
+    {
+      "index": 54,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.417,
+      "message": "accepted"
+    },
+    {
+      "index": 55,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.18,
+      "message": "accepted"
+    },
+    {
+      "index": 56,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.324,
+      "message": "accepted"
+    },
+    {
+      "index": 57,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.48,
+      "message": "accepted"
+    },
+    {
+      "index": 58,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.437,
+      "message": "accepted"
+    },
+    {
+      "index": 59,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.212,
+      "message": "accepted"
+    },
+    {
+      "index": 60,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.4,
+      "message": "accepted"
+    },
+    {
+      "index": 61,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.321,
+      "message": "accepted"
+    },
+    {
+      "index": 62,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.336,
+      "message": "accepted"
+    },
+    {
+      "index": 63,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.288,
+      "message": "accepted"
+    },
+    {
+      "index": 64,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 3.298,
+      "message": "accepted"
+    },
+    {
+      "index": 65,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.675,
+      "message": "accepted"
+    },
+    {
+      "index": 66,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.6,
+      "message": "accepted"
+    },
+    {
+      "index": 67,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.504,
+      "message": "accepted"
+    },
+    {
+      "index": 68,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.346,
+      "message": "accepted"
+    },
+    {
+      "index": 69,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.315,
+      "message": "accepted"
+    },
+    {
+      "index": 70,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.342,
+      "message": "accepted"
+    },
+    {
+      "index": 71,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.223,
+      "message": "accepted"
+    },
+    {
+      "index": 72,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.409,
+      "message": "accepted"
+    },
+    {
+      "index": 73,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.138,
+      "message": "accepted"
+    },
+    {
+      "index": 74,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.724,
+      "message": "accepted"
+    },
+    {
+      "index": 75,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.304,
+      "message": "accepted"
+    },
+    {
+      "index": 76,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 3.021,
+      "message": "accepted"
+    },
+    {
+      "index": 77,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.602,
+      "message": "accepted"
+    },
+    {
+      "index": 78,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.13,
+      "message": "accepted"
+    },
+    {
+      "index": 79,
+      "status": 202,
+      "accepted": true,
+      "latencyMs": 2.514,
+      "message": "accepted"
+    }
+  ]
+}

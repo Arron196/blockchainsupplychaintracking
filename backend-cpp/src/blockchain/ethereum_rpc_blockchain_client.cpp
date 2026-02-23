@@ -27,6 +27,8 @@ namespace {
 
 constexpr std::uint32_t kRpcHttpMaxAttempts = 3;
 constexpr std::uint32_t kRpcRetryDelayMs = 100;
+constexpr std::size_t kRpcErrorPreviewLimit = 768;
+constexpr char kRpcHttpStatusPrefix[] = "rpc http status ";
 
 struct ParsedHttpUrl {
     std::string host;
@@ -174,7 +176,7 @@ std::string HttpPostJson(const std::string& url, const std::string& payload) {
     const int statusCode = std::stoi(statusMatch[1].str());
     const std::string body = response.substr(headerEnd + 4);
     if (statusCode < 200 || statusCode >= 300) {
-        throw std::runtime_error("rpc http status " + std::to_string(statusCode));
+        throw std::runtime_error(std::string(kRpcHttpStatusPrefix) + std::to_string(statusCode));
     }
     return body;
 }
@@ -225,7 +227,7 @@ std::string ExtractRpcError(const std::string& json) {
         return "unknown rpc error";
     }
 
-    const std::string errorJson = json.substr(errorPos, 768);
+    const std::string errorJson = json.substr(errorPos, kRpcErrorPreviewLimit);
     const auto code = ExtractJsonIntegerField(errorJson, "code");
     const auto message = ExtractJsonStringField(errorJson, "message");
     const auto data = ExtractJsonStringField(errorJson, "data");
@@ -254,9 +256,11 @@ bool IsReceiptNull(const std::string& body) {
 }
 
 bool IsTransientRpcFailure(const std::string& message) {
-    if (message.rfind("rpc http status ", 0) == 0) {
+    constexpr std::size_t kStatusPrefixLen = sizeof(kRpcHttpStatusPrefix) - 1U;
+
+    if (message.rfind(kRpcHttpStatusPrefix, 0) == 0) {
         try {
-            const int statusCode = std::stoi(message.substr(std::string("rpc http status ").size()));
+            const int statusCode = std::stoi(message.substr(kStatusPrefixLen));
             return statusCode >= 500;
         } catch (...) {
             return false;
@@ -271,10 +275,13 @@ bool IsTransientRpcFailure(const std::string& message) {
 }
 
 std::string HttpPostJsonWithRetry(const std::string& url, const std::string& payload) {
+    std::runtime_error lastError("rpc retry loop exhausted");
+
     for (std::uint32_t attempt = 1; attempt <= kRpcHttpMaxAttempts; ++attempt) {
         try {
             return HttpPostJson(url, payload);
         } catch (const std::runtime_error& error) {
+            lastError = error;
             if (attempt == kRpcHttpMaxAttempts || !IsTransientRpcFailure(error.what())) {
                 throw;
             }
@@ -282,7 +289,7 @@ std::string HttpPostJsonWithRetry(const std::string& url, const std::string& pay
         }
     }
 
-    throw std::runtime_error("rpc retry loop exhausted");
+    throw lastError;
 }
 
 }  

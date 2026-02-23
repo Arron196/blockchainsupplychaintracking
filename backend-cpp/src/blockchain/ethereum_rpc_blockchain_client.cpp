@@ -303,32 +303,31 @@ bool IsTransientRpcFailure(const RpcTransportError& error) {
             return error.httpStatusCode() >= 500;
         case RpcFailureType::ResolveHost:
             return false;
+        default:
+            return false;
     }
-
-    return false;
 }
 
 std::string HttpPostJsonWithRetry(const std::string& url, const std::string& payload) {
-    RpcFailureType lastFailureType = RpcFailureType::Connect;
-    int lastHttpStatusCode = 0;
-    std::string lastMessage = "rpc retry loop exhausted";
+    RpcTransportError lastError(RpcFailureType::Connect, "rpc retry loop exhausted");
 
     for (std::uint32_t attempt = 1; attempt <= kRpcHttpMaxAttempts; ++attempt) {
         try {
             return HttpPostJson(url, payload);
         } catch (const RpcTransportError& error) {
-            lastFailureType = error.type();
-            lastHttpStatusCode = error.httpStatusCode();
-            lastMessage = error.what();
+            lastError = error;
 
-            if (attempt == kRpcHttpMaxAttempts || !IsTransientRpcFailure(error)) {
+            if (!IsTransientRpcFailure(error)) {
                 throw;
+            }
+            if (attempt == kRpcHttpMaxAttempts) {
+                break;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(kRpcRetryDelayMs));
         }
     }
 
-    throw RpcTransportError(lastFailureType, lastMessage, lastHttpStatusCode);
+    throw lastError;
 }
 
 }  

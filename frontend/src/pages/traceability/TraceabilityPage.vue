@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 
-import { fetchBatchTrace } from "@/api/traceability";
 import TraceRecordList from "@/components/TraceRecordList.vue";
 import type { BatchTraceResponse } from "@/types/contracts";
 
@@ -25,6 +24,7 @@ const submitBatchLookup = async (): Promise<void> => {
   result.value = null;
 
   try {
+    const { fetchBatchTrace } = await import("@/api/traceability");
     result.value = await fetchBatchTrace(trimmedCode);
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "Batch query failed.";
@@ -32,6 +32,10 @@ const submitBatchLookup = async (): Promise<void> => {
     loading.value = false;
   }
 };
+
+// Biome does not analyze Vue template references.
+const templateBindings = { hasRecords, submitBatchLookup };
+void templateBindings;
 </script>
 
 <template>
@@ -41,9 +45,15 @@ const submitBatchLookup = async (): Promise<void> => {
       <p class="hint">Queries <code>GET /api/v1/batches/{batchCode}/trace</code> and displays route status for demo proof.</p>
 
       <form class="query-form" @submit.prevent="submitBatchLookup">
-        <label>
+        <label for="batch-code-input">
           Batch Code
-          <input v-model="batchCodeInput" type="text" autocomplete="off" placeholder="BATCH-2026-001" />
+          <input
+            id="batch-code-input"
+            v-model="batchCodeInput"
+            type="text"
+            autocomplete="off"
+            placeholder="BATCH-2026-001"
+          />
         </label>
         <button class="btn" :disabled="loading" type="submit">{{ loading ? "Searching..." : "Query Trace" }}</button>
       </form>

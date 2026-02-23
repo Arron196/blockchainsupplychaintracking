@@ -27,3 +27,15 @@ Recommended stack: Vue 3 + TypeScript + Vite + Pinia + ECharts.
 npm install
 npm run dev
 ```
+
+## Environment variables
+
+Create `.env.local` in `frontend/` when backend host differs from defaults:
+
+```bash
+VITE_API_BASE_URL=http://127.0.0.1:8080
+VITE_WS_BASE_URL=ws://127.0.0.1:8080
+```
+
+- `VITE_API_BASE_URL`: REST API base URL.
+- `VITE_WS_BASE_URL`: WebSocket base URL used by telemetry/alerts channels.

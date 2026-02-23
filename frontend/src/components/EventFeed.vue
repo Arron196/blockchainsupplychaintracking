@@ -10,7 +10,7 @@ defineProps<{
   <section class="panel event-feed">
     <h3>{{ title }}</h3>
     <ul v-if="items.length > 0">
-      <li v-for="item in items" :key="item">{{ item }}</li>
+      <li v-for="(item, index) in items" :key="`${index}-${item}`">{{ item }}</li>
     </ul>
     <p v-else class="muted">{{ emptyText }}</p>
   </section>

@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 
 #include "transport/json_parser.h"
 #include "utils/hash_utils.h"
@@ -29,6 +30,31 @@ constexpr std::uint32_t kRpcHttpMaxAttempts = 3;
 constexpr std::uint32_t kRpcRetryDelayMs = 100;
 constexpr std::size_t kRpcErrorPreviewLimit = 768;
 constexpr char kRpcHttpStatusPrefix[] = "rpc http status ";
+
+enum class RpcFailureType {
+    ResolveHost,
+    Connect,
+    Send,
+    Read,
+    InvalidResponse,
+    InvalidStatusLine,
+    HttpStatus
+};
+
+class RpcTransportError final : public std::runtime_error {
+   public:
+    RpcTransportError(RpcFailureType type, std::string message, int httpStatusCode = 0)
+        : std::runtime_error(std::move(message)),
+          type_(type),
+          httpStatusCode_(httpStatusCode) {}
+
+    RpcFailureType type() const { return type_; }
+    int httpStatusCode() const { return httpStatusCode_; }
+
+   private:
+    RpcFailureType type_;
+    int httpStatusCode_;
+};
 
 struct ParsedHttpUrl {
     std::string host;
@@ -80,7 +106,7 @@ std::string ReadSocketFully(int socketFd) {
             if (errno == EINTR) {
                 continue;
             }
-            throw std::runtime_error("failed to read rpc response");
+            throw RpcTransportError(RpcFailureType::Read, "failed to read rpc response");
         }
         response.append(buffer, static_cast<std::size_t>(received));
     }
@@ -89,16 +115,23 @@ std::string ReadSocketFully(int socketFd) {
 
 void SendAll(int socketFd, std::string_view data) {
     std::size_t sentBytes = 0;
+
+#if defined(MSG_NOSIGNAL)
+    constexpr int sendFlags = MSG_NOSIGNAL;
+#else
+    constexpr int sendFlags = 0;
+#endif
+
     while (sentBytes < data.size()) {
-        const ssize_t sent = send(socketFd, data.data() + sentBytes, data.size() - sentBytes, 0);
+        const ssize_t sent = send(socketFd, data.data() + sentBytes, data.size() - sentBytes, sendFlags);
         if (sent < 0) {
             if (errno == EINTR) {
                 continue;
             }
-            throw std::runtime_error("failed to send rpc request");
+            throw RpcTransportError(RpcFailureType::Send, "failed to send rpc request");
         }
         if (sent == 0) {
-            throw std::runtime_error("failed to send rpc request");
+            throw RpcTransportError(RpcFailureType::Send, "failed to send rpc request");
         }
         sentBytes += static_cast<std::size_t>(sent);
     }
@@ -121,7 +154,7 @@ std::string HttpPostJson(const std::string& url, const std::string& payload) {
         &hints,
         &result);
     if (resolveCode != 0 || result == nullptr) {
-        throw std::runtime_error("cannot resolve rpc host");
+        throw RpcTransportError(RpcFailureType::ResolveHost, "cannot resolve rpc host");
     }
 
     int socketFd = -1;
@@ -139,7 +172,7 @@ std::string HttpPostJson(const std::string& url, const std::string& payload) {
     freeaddrinfo(result);
 
     if (socketFd < 0) {
-        throw std::runtime_error("cannot connect to rpc endpoint");
+        throw RpcTransportError(RpcFailureType::Connect, "cannot connect to rpc endpoint");
     }
 
     std::ostringstream request;
@@ -163,20 +196,23 @@ std::string HttpPostJson(const std::string& url, const std::string& payload) {
 
     const std::size_t headerEnd = response.find("\r\n\r\n");
     if (headerEnd == std::string::npos) {
-        throw std::runtime_error("invalid rpc response");
+        throw RpcTransportError(RpcFailureType::InvalidResponse, "invalid rpc response");
     }
 
     const std::string statusLine = response.substr(0, response.find("\r\n"));
     const std::regex statusPattern("HTTP/1\\.[01]\\s+([0-9]{3})");
     std::smatch statusMatch;
     if (!std::regex_search(statusLine, statusMatch, statusPattern)) {
-        throw std::runtime_error("invalid rpc status line");
+        throw RpcTransportError(RpcFailureType::InvalidStatusLine, "invalid rpc status line");
     }
 
     const int statusCode = std::stoi(statusMatch[1].str());
     const std::string body = response.substr(headerEnd + 4);
     if (statusCode < 200 || statusCode >= 300) {
-        throw std::runtime_error(std::string(kRpcHttpStatusPrefix) + std::to_string(statusCode));
+        throw RpcTransportError(
+            RpcFailureType::HttpStatus,
+            std::string(kRpcHttpStatusPrefix) + std::to_string(statusCode),
+            statusCode);
     }
     return body;
 }
@@ -255,41 +291,44 @@ bool IsReceiptNull(const std::string& body) {
     return std::regex_search(body, pattern);
 }
 
-bool IsTransientRpcFailure(const std::string& message) {
-    constexpr std::size_t kStatusPrefixLen = sizeof(kRpcHttpStatusPrefix) - 1U;
-
-    if (message.rfind(kRpcHttpStatusPrefix, 0) == 0) {
-        try {
-            const int statusCode = std::stoi(message.substr(kStatusPrefixLen));
-            return statusCode >= 500;
-        } catch (...) {
+bool IsTransientRpcFailure(const RpcTransportError& error) {
+    switch (error.type()) {
+        case RpcFailureType::Connect:
+        case RpcFailureType::Send:
+        case RpcFailureType::Read:
+        case RpcFailureType::InvalidResponse:
+        case RpcFailureType::InvalidStatusLine:
+            return true;
+        case RpcFailureType::HttpStatus:
+            return error.httpStatusCode() >= 500;
+        case RpcFailureType::ResolveHost:
             return false;
-        }
     }
 
-    return message == "cannot connect to rpc endpoint" ||
-           message == "failed to send rpc request" ||
-           message == "failed to read rpc response" ||
-           message == "invalid rpc response" ||
-           message == "invalid rpc status line";
+    return false;
 }
 
 std::string HttpPostJsonWithRetry(const std::string& url, const std::string& payload) {
-    std::runtime_error lastError("rpc retry loop exhausted");
+    RpcFailureType lastFailureType = RpcFailureType::Connect;
+    int lastHttpStatusCode = 0;
+    std::string lastMessage = "rpc retry loop exhausted";
 
     for (std::uint32_t attempt = 1; attempt <= kRpcHttpMaxAttempts; ++attempt) {
         try {
             return HttpPostJson(url, payload);
-        } catch (const std::runtime_error& error) {
-            lastError = error;
-            if (attempt == kRpcHttpMaxAttempts || !IsTransientRpcFailure(error.what())) {
+        } catch (const RpcTransportError& error) {
+            lastFailureType = error.type();
+            lastHttpStatusCode = error.httpStatusCode();
+            lastMessage = error.what();
+
+            if (attempt == kRpcHttpMaxAttempts || !IsTransientRpcFailure(error)) {
                 throw;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(kRpcRetryDelayMs));
         }
     }
 
-    throw lastError;
+    throw RpcTransportError(lastFailureType, lastMessage, lastHttpStatusCode);
 }
 
 }  

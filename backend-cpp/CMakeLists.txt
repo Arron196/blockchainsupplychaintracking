@@ -53,3 +53,7 @@ add_test(NAME json_parser COMMAND test_json_parser)
 add_executable(test_sqlite_repository tests/test_sqlite_repository.cpp)
 target_link_libraries(test_sqlite_repository PRIVATE agri_gateway_core)
 add_test(NAME sqlite_repository COMMAND test_sqlite_repository)
+
+add_executable(test_ethereum_rpc_client tests/test_ethereum_rpc_client.cpp)
+target_link_libraries(test_ethereum_rpc_client PRIVATE agri_gateway_core)
+add_test(NAME ethereum_rpc_client COMMAND test_ethereum_rpc_client)

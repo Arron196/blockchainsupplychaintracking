@@ -6,9 +6,14 @@ defineProps<{
 }>();
 
 const renderTime = (timestamp: number): string => {
-  const normalized = timestamp > 10_000_000_000 ? timestamp : timestamp * 1000;
+  const asMillisecondsYear = new Date(timestamp).getUTCFullYear();
+  const looksLikeMilliseconds = asMillisecondsYear >= 2000 && asMillisecondsYear <= 3000;
+  const normalized = looksLikeMilliseconds ? timestamp : timestamp * 1000;
   return new Date(normalized).toLocaleString();
 };
+
+const templateBindings = { renderTime };
+void templateBindings;
 </script>
 
 <template>

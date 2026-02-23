@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@/api/http";
 import type { IngestRejectedEvent, TelemetryIngestedEvent } from "@/types/contracts";
+import { isAlertEvent, isTelemetryEvent, parseDashboardEvent } from "@/websocket/events";
 
 const envWsBase = import.meta.env.VITE_WS_BASE_URL as string | undefined;
 
@@ -7,7 +8,7 @@ const wsBaseUrl = (() => {
   if (envWsBase) {
     return envWsBase.replace(/\/$/, "");
   }
-  return API_BASE_URL.replace(/^http/, "ws");
+  return API_BASE_URL.replace(/^http(s?):/i, "ws$1:");
 })();
 
 interface SocketHandlers<TEvent> {
@@ -15,6 +16,7 @@ interface SocketHandlers<TEvent> {
   onOpen?: () => void;
   onClose?: () => void;
   onError?: (error: Error) => void;
+  parse?: (payload: unknown) => TEvent | null;
 }
 
 const connectSocket = <TEvent>(path: string, handlers: SocketHandlers<TEvent>): WebSocket => {
@@ -26,15 +28,26 @@ const connectSocket = <TEvent>(path: string, handlers: SocketHandlers<TEvent>): 
 
   socket.addEventListener("message", (messageEvent) => {
     try {
-      handlers.onMessage(JSON.parse(messageEvent.data as string) as TEvent);
+      const rawPayload: unknown = JSON.parse(messageEvent.data as string);
+      const parsed = handlers.parse ? handlers.parse(rawPayload) : (rawPayload as TEvent);
+      if (parsed == null) {
+        handlers.onError?.(new Error("WebSocket payload shape is invalid."));
+        return;
+      }
+      handlers.onMessage(parsed);
     } catch {
       handlers.onError?.(new Error("Failed to parse websocket payload as JSON."));
       return;
     }
   });
 
-  socket.addEventListener("error", () => {
-    handlers.onError?.(new Error("WebSocket connection error."));
+  socket.addEventListener("error", (event) => {
+    const detail = JSON.stringify({
+      readyState: socket.readyState,
+      type: event.type,
+      targetUrl: socket.url
+    });
+    handlers.onError?.(new Error(`WebSocket connection error: ${detail}`));
   });
 
   socket.addEventListener("close", () => {
@@ -45,7 +58,25 @@ const connectSocket = <TEvent>(path: string, handlers: SocketHandlers<TEvent>): 
 };
 
 export const connectTelemetrySocket = (handlers: SocketHandlers<TelemetryIngestedEvent>): WebSocket =>
-  connectSocket<TelemetryIngestedEvent>("/ws/telemetry", handlers);
+  connectSocket<TelemetryIngestedEvent>("/ws/telemetry", {
+    ...handlers,
+    parse: (payload) => {
+      const event = parseDashboardEvent(payload);
+      if (event == null || !isTelemetryEvent(event)) {
+        return null;
+      }
+      return event;
+    }
+  });
 
 export const connectAlertSocket = (handlers: SocketHandlers<IngestRejectedEvent>): WebSocket =>
-  connectSocket<IngestRejectedEvent>("/ws/alerts", handlers);
+  connectSocket<IngestRejectedEvent>("/ws/alerts", {
+    ...handlers,
+    parse: (payload) => {
+      const event = parseDashboardEvent(payload);
+      if (event == null || !isAlertEvent(event)) {
+        return null;
+      }
+      return event;
+    }
+  });

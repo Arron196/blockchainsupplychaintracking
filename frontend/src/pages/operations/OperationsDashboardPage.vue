@@ -7,14 +7,122 @@ import MetricCard from "@/components/MetricCard.vue";
 import type { IngestRejectedEvent, MetricsOverview, TelemetryIngestedEvent } from "@/types/contracts";
 import { connectAlertSocket, connectTelemetrySocket } from "@/websocket/client";
 
+type SocketState = "closed" | "connecting" | "open" | "reconnecting" | "error";
+
 const metrics = ref<MetricsOverview | null>(null);
 const loading = ref(true);
 const loadError = ref<string | null>(null);
 const telemetryUpdates = ref<TelemetryIngestedEvent[]>([]);
 const alertUpdates = ref<IngestRejectedEvent[]>([]);
+const telemetrySocketState = ref<SocketState>("closed");
+const alertSocketState = ref<SocketState>("closed");
+const socketErrorBanner = ref<string | null>(null);
 
 let telemetrySocket: WebSocket | null = null;
 let alertSocket: WebSocket | null = null;
+let telemetryRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let alertRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let shuttingDown = false;
+
+const socketReconnectDelayMs = 1500;
+
+const formatSocketState = (state: SocketState): string => {
+  if (state === "reconnecting") {
+    return "reconnecting";
+  }
+  if (state === "connecting") {
+    return "connecting";
+  }
+  if (state === "open") {
+    return "connected";
+  }
+  if (state === "error") {
+    return "error";
+  }
+  return "closed";
+};
+
+const pushSocketError = (channel: string, error: Error): void => {
+  socketErrorBanner.value = `${channel}: ${error.message}`;
+};
+
+const scheduleTelemetryReconnect = (): void => {
+  if (shuttingDown || telemetryRetryTimer != null) {
+    return;
+  }
+  telemetrySocketState.value = "reconnecting";
+  telemetryRetryTimer = setTimeout(() => {
+    telemetryRetryTimer = null;
+    openTelemetrySocket();
+  }, socketReconnectDelayMs);
+};
+
+const scheduleAlertReconnect = (): void => {
+  if (shuttingDown || alertRetryTimer != null) {
+    return;
+  }
+  alertSocketState.value = "reconnecting";
+  alertRetryTimer = setTimeout(() => {
+    alertRetryTimer = null;
+    openAlertSocket();
+  }, socketReconnectDelayMs);
+};
+
+const openTelemetrySocket = (): void => {
+  if (telemetrySocket != null && telemetrySocket.readyState <= WebSocket.OPEN) {
+    return;
+  }
+
+  telemetrySocketState.value = "connecting";
+  telemetrySocket = connectTelemetrySocket({
+    onOpen: () => {
+      telemetrySocketState.value = "open";
+    },
+    onMessage: (event) => {
+      telemetryUpdates.value = [event, ...telemetryUpdates.value].slice(0, 20);
+    },
+    onError: (error) => {
+      telemetrySocketState.value = "error";
+      pushSocketError("telemetry websocket", error);
+    },
+    onClose: () => {
+      telemetrySocket = null;
+      if (shuttingDown) {
+        telemetrySocketState.value = "closed";
+        return;
+      }
+      scheduleTelemetryReconnect();
+    }
+  });
+};
+
+const openAlertSocket = (): void => {
+  if (alertSocket != null && alertSocket.readyState <= WebSocket.OPEN) {
+    return;
+  }
+
+  alertSocketState.value = "connecting";
+  alertSocket = connectAlertSocket({
+    onOpen: () => {
+      alertSocketState.value = "open";
+    },
+    onMessage: (event) => {
+      alertUpdates.value = [event, ...alertUpdates.value].slice(0, 20);
+    },
+    onError: (error) => {
+      alertSocketState.value = "error";
+      pushSocketError("alert websocket", error);
+    },
+    onClose: () => {
+      alertSocket = null;
+      if (shuttingDown) {
+        alertSocketState.value = "closed";
+        return;
+      }
+      scheduleAlertReconnect();
+    }
+  });
+};
 
 const telemetryItems = computed(() =>
   telemetryUpdates.value
@@ -28,6 +136,9 @@ const telemetryItems = computed(() =>
 const alertItems = computed(() =>
   alertUpdates.value.slice(0, 8).map((event) => `${event.deviceId} rejected: ${event.message}`)
 );
+
+const templateBindings = { EventFeed, MetricCard, formatSocketState, telemetryItems, alertItems };
+void templateBindings;
 
 const loadMetrics = async (): Promise<void> => {
   loading.value = true;
@@ -43,22 +154,22 @@ const loadMetrics = async (): Promise<void> => {
 };
 
 onMounted(async () => {
+  shuttingDown = false;
   await loadMetrics();
-
-  telemetrySocket = connectTelemetrySocket({
-    onMessage: (event) => {
-      telemetryUpdates.value = [event, ...telemetryUpdates.value].slice(0, 20);
-    }
-  });
-
-  alertSocket = connectAlertSocket({
-    onMessage: (event) => {
-      alertUpdates.value = [event, ...alertUpdates.value].slice(0, 20);
-    }
-  });
+  openTelemetrySocket();
+  openAlertSocket();
 });
 
 onUnmounted(() => {
+  shuttingDown = true;
+  if (telemetryRetryTimer != null) {
+    clearTimeout(telemetryRetryTimer);
+    telemetryRetryTimer = null;
+  }
+  if (alertRetryTimer != null) {
+    clearTimeout(alertRetryTimer);
+    alertRetryTimer = null;
+  }
   telemetrySocket?.close();
   alertSocket?.close();
 });
@@ -69,8 +180,11 @@ onUnmounted(() => {
     <div class="panel headline-panel">
       <h2>Gateway Status Visibility</h2>
       <p class="muted">Live counters from <code>/api/v1/metrics/overview</code> with websocket event channels attached.</p>
+      <p class="muted">Telemetry stream: {{ formatSocketState(telemetrySocketState) }}</p>
+      <p class="muted">Alert stream: {{ formatSocketState(alertSocketState) }}</p>
       <button class="btn" type="button" @click="loadMetrics">Refresh snapshot</button>
       <p v-if="loadError" class="error">{{ loadError }}</p>
+      <p v-if="socketErrorBanner" class="error">{{ socketErrorBanner }}</p>
     </div>
 
     <template v-if="metrics && !loading">

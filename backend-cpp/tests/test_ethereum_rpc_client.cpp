@@ -11,6 +11,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -31,6 +32,12 @@ class ScriptedRpcServer {
     }
 
     ~ScriptedRpcServer() {
+        stopRequested_.store(true);
+        if (listenerFd_ >= 0) {
+            shutdown(listenerFd_, SHUT_RDWR);
+            close(listenerFd_);
+            listenerFd_ = -1;
+        }
         if (serverThread_.joinable()) {
             serverThread_.join();
         }
@@ -72,10 +79,17 @@ class ScriptedRpcServer {
 
         serverThread_ = std::thread([this]() {
             for (const auto& scripted : responses_) {
+                if (stopRequested_.load()) {
+                    break;
+                }
+
                 sockaddr_in clientAddr{};
                 socklen_t clientLen = sizeof(clientAddr);
                 const int clientFd = accept(listenerFd_, reinterpret_cast<sockaddr*>(&clientAddr), &clientLen);
                 if (clientFd < 0) {
+                    if (stopRequested_.load()) {
+                        break;
+                    }
                     break;
                 }
 
@@ -105,19 +119,30 @@ class ScriptedRpcServer {
                     "Connection: close\r\n\r\n" +
                     scripted.body;
 
-                send(clientFd, response.data(), response.size(), 0);
+                std::size_t totalSent = 0;
+                while (totalSent < response.size()) {
+                    const ssize_t sent =
+                        send(clientFd, response.data() + totalSent, response.size() - totalSent, 0);
+                    if (sent <= 0) {
+                        break;
+                    }
+                    totalSent += static_cast<std::size_t>(sent);
+                }
                 close(clientFd);
                 servedRequests_.fetch_add(1);
             }
 
-            close(listenerFd_);
-            listenerFd_ = -1;
+            if (listenerFd_ >= 0) {
+                close(listenerFd_);
+                listenerFd_ = -1;
+            }
         });
     }
 
     std::vector<ScriptedResponse> responses_;
     std::thread serverThread_;
     std::atomic<std::size_t> servedRequests_{0};
+    std::atomic<bool> stopRequested_{false};
     int listenerFd_{-1};
     std::uint16_t port_{0};
 };

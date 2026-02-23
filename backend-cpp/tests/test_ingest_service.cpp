@@ -20,6 +20,7 @@
 #include "security/signature_verifier.h"
 #include "services/ingest_service.h"
 #include "storage/in_memory_telemetry_repository.h"
+#include "storage/telemetry_repository.h"
 #include "utils/hash_utils.h"
 
 namespace {
@@ -136,6 +137,53 @@ class ThrowingBlockchainClient final : public agri::BlockchainClient {
     }
 };
 
+class AttachReceiptFailingRepository final : public agri::TelemetryRepository {
+   public:
+    explicit AttachReceiptFailingRepository(bool throwOnDelete)
+        : throwOnDelete_(throwOnDelete) {}
+
+    std::uint64_t Save(const agri::TelemetryPacket&) override {
+        hasRecord_ = true;
+        return 1;
+    }
+
+    bool AttachReceipt(std::uint64_t, const agri::BlockchainReceipt&) override {
+        return false;
+    }
+
+    bool Delete(std::uint64_t) override {
+        deleteCalled_ = true;
+        if (throwOnDelete_) {
+            throw std::runtime_error("simulated delete failure");
+        }
+        hasRecord_ = false;
+        return true;
+    }
+
+    std::optional<agri::TelemetryRecord> LatestByDevice(const std::string&) const override {
+        return std::nullopt;
+    }
+
+    std::optional<agri::TelemetryRecord> FindByTransaction(const std::string&) const override {
+        return std::nullopt;
+    }
+
+    std::vector<agri::TelemetryRecord> FindByBatch(const std::string&) const override {
+        return {};
+    }
+
+    std::uint64_t Size() const override {
+        return hasRecord_ ? 1 : 0;
+    }
+
+    bool deleteCalled() const { return deleteCalled_; }
+
+   private:
+    bool throwOnDelete_{false};
+    bool hasRecord_{false};
+    bool deleteCalled_{false};
+};
+
 void TestAcceptsValidPacket() {
     agri::InMemoryTelemetryRepository repository;
     agri::BasicSignatureVerifier verifier(BuildPublicKeys());
@@ -201,6 +249,32 @@ void TestRollsBackStorageOnBlockchainFailure() {
     assert(repository.Size() == 0);
 }
 
+void TestRollbackOnAttachReceiptFailure() {
+    AttachReceiptFailingRepository repository(false);
+    agri::BasicSignatureVerifier verifier(BuildPublicKeys());
+    agri::MockBlockchainClient blockchain;
+    agri::IngestService service(repository, verifier, blockchain);
+
+    const agri::IngestResult result = service.Ingest(MakeValidPacket());
+    assert(!result.accepted);
+    assert(result.message == "receipt persistence failed after blockchain submit");
+    assert(repository.Size() == 0);
+    assert(repository.deleteCalled());
+}
+
+void TestRollbackFailureDoesNotMaskBlockchainError() {
+    AttachReceiptFailingRepository repository(true);
+    agri::BasicSignatureVerifier verifier(BuildPublicKeys());
+    ThrowingBlockchainClient blockchain;
+    agri::IngestService service(repository, verifier, blockchain);
+
+    const agri::IngestResult result = service.Ingest(MakeValidPacket());
+    assert(!result.accepted);
+    assert(result.message ==
+           "blockchain submit failed: simulated blockchain outage; rollback delete failed: simulated delete failure");
+    assert(repository.deleteCalled());
+}
+
 }
 
 int main() {
@@ -208,6 +282,8 @@ int main() {
     TestRejectsHashMismatch();
     TestRejectsInvalidSignature();
     TestRollsBackStorageOnBlockchainFailure();
+    TestRollbackOnAttachReceiptFailure();
+    TestRollbackFailureDoesNotMaskBlockchainError();
     std::cout << "test_ingest_service passed" << std::endl;
     return 0;
 }

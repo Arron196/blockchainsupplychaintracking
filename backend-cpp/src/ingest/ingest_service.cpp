@@ -67,26 +67,55 @@ IngestResult IngestService::Ingest(const TelemetryPacket& packet) {
     const std::uint64_t recordId = repository_.Save(packet);
     result.recordId = recordId;
 
-    try {
-        const BlockchainReceipt receipt =
-            blockchainClient_.SubmitHash(packet.hashHex, packet.deviceId, packet.timestamp);
-        if (!repository_.AttachReceipt(recordId, receipt)) {
-            repository_.Delete(recordId);
-            finishWith(false, "receipt persistence failed");
-            return result;
+    auto rollbackBestEffort = [&](std::string* rollbackSuffix) {
+        try {
+            if (!repository_.Delete(recordId)) {
+                *rollbackSuffix = "; rollback delete did not remove record";
+            }
+        } catch (const std::exception& ex) {
+            *rollbackSuffix = std::string("; rollback delete failed: ") + ex.what();
+        } catch (...) {
+            *rollbackSuffix = "; rollback delete failed: unknown error";
         }
-        result.receipt = receipt;
-        finishWith(true, "accepted");
-        return result;
+    };
+
+    BlockchainReceipt receipt;
+    try {
+        receipt = blockchainClient_.SubmitHash(packet.hashHex, packet.deviceId, packet.timestamp);
     } catch (const std::exception& ex) {
-        repository_.Delete(recordId);
-        finishWith(false, std::string("blockchain submit failed: ") + ex.what());
+        std::string rollbackSuffix;
+        rollbackBestEffort(&rollbackSuffix);
+        finishWith(false, std::string("blockchain submit failed: ") + ex.what() + rollbackSuffix);
         return result;
     } catch (...) {
-        repository_.Delete(recordId);
-        finishWith(false, "blockchain submit failed: unknown error");
+        std::string rollbackSuffix;
+        rollbackBestEffort(&rollbackSuffix);
+        finishWith(false, std::string("blockchain submit failed: unknown error") + rollbackSuffix);
         return result;
     }
+
+    try {
+        if (!repository_.AttachReceipt(recordId, receipt)) {
+            std::string rollbackSuffix;
+            rollbackBestEffort(&rollbackSuffix);
+            finishWith(false, std::string("receipt persistence failed after blockchain submit") + rollbackSuffix);
+            return result;
+        }
+    } catch (const std::exception& ex) {
+        std::string rollbackSuffix;
+        rollbackBestEffort(&rollbackSuffix);
+        finishWith(false, std::string("receipt persistence failed: ") + ex.what() + rollbackSuffix);
+        return result;
+    } catch (...) {
+        std::string rollbackSuffix;
+        rollbackBestEffort(&rollbackSuffix);
+        finishWith(false, std::string("receipt persistence failed: unknown error") + rollbackSuffix);
+        return result;
+    }
+
+    result.receipt = receipt;
+    finishWith(true, "accepted");
+    return result;
 }
 
 MetricsSnapshot IngestService::GetMetricsSnapshot() const {

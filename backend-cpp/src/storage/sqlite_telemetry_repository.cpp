@@ -13,6 +13,24 @@ namespace agri {
 
 namespace {
 
+class StatementGuard {
+   public:
+    explicit StatementGuard(sqlite3_stmt* statement) : statement_(statement) {}
+    ~StatementGuard() {
+        if (statement_ != nullptr) {
+            sqlite3_finalize(statement_);
+        }
+    }
+
+    StatementGuard(const StatementGuard&) = delete;
+    StatementGuard& operator=(const StatementGuard&) = delete;
+
+    sqlite3_stmt* Get() const { return statement_; }
+
+   private:
+    sqlite3_stmt* statement_;
+};
+
 void ThrowIfSqlError(int code, sqlite3* db, const std::string& prefix) {
     if (code == SQLITE_OK || code == SQLITE_DONE || code == SQLITE_ROW) {
         return;
@@ -94,24 +112,23 @@ std::uint64_t SQLiteTelemetryRepository::Save(const TelemetryPacket& packet) {
         "INSERT INTO telemetry_records "
         "(device_id, timestamp, telemetry_json, hash_hex, signature, pub_key_id, transport, batch_code) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
-    sqlite3_stmt* statement = PrepareOrThrow(db_, sql);
+    StatementGuard statement(PrepareOrThrow(db_, sql));
 
-    BindTextOrThrow(db_, statement, 1, packet.deviceId);
-    BindInt64OrThrow(db_, statement, 2, static_cast<std::int64_t>(packet.timestamp));
-    BindTextOrThrow(db_, statement, 3, packet.telemetryJson);
-    BindTextOrThrow(db_, statement, 4, packet.hashHex);
-    BindTextOrThrow(db_, statement, 5, packet.signature);
-    BindTextOrThrow(db_, statement, 6, packet.pubKeyId);
-    BindTextOrThrow(db_, statement, 7, packet.transport);
+    BindTextOrThrow(db_, statement.Get(), 1, packet.deviceId);
+    BindInt64OrThrow(db_, statement.Get(), 2, static_cast<std::int64_t>(packet.timestamp));
+    BindTextOrThrow(db_, statement.Get(), 3, packet.telemetryJson);
+    BindTextOrThrow(db_, statement.Get(), 4, packet.hashHex);
+    BindTextOrThrow(db_, statement.Get(), 5, packet.signature);
+    BindTextOrThrow(db_, statement.Get(), 6, packet.pubKeyId);
+    BindTextOrThrow(db_, statement.Get(), 7, packet.transport);
     if (packet.batchCode.empty()) {
-        ThrowIfSqlError(sqlite3_bind_null(statement, 8), db_, "bind batch code failed");
+        ThrowIfSqlError(sqlite3_bind_null(statement.Get(), 8), db_, "bind batch code failed");
     } else {
-        BindTextOrThrow(db_, statement, 8, packet.batchCode);
+        BindTextOrThrow(db_, statement.Get(), 8, packet.batchCode);
     }
 
-    const int code = sqlite3_step(statement);
+    const int code = sqlite3_step(statement.Get());
     ThrowIfSqlError(code, db_, "insert telemetry failed");
-    sqlite3_finalize(statement);
 
     return static_cast<std::uint64_t>(sqlite3_last_insert_rowid(db_));
 }
@@ -121,17 +138,16 @@ bool SQLiteTelemetryRepository::AttachReceipt(std::uint64_t recordId, const Bloc
 
     const std::string sql =
         "UPDATE telemetry_records SET tx_hash = ?, block_height = ?, submitted_at = ? WHERE record_id = ?;";
-    sqlite3_stmt* statement = PrepareOrThrow(db_, sql);
+    StatementGuard statement(PrepareOrThrow(db_, sql));
 
-    BindTextOrThrow(db_, statement, 1, receipt.txHash);
-    BindInt64OrThrow(db_, statement, 2, static_cast<std::int64_t>(receipt.blockHeight));
-    BindTextOrThrow(db_, statement, 3, receipt.submittedAtIso8601);
-    BindInt64OrThrow(db_, statement, 4, static_cast<std::int64_t>(recordId));
+    BindTextOrThrow(db_, statement.Get(), 1, receipt.txHash);
+    BindInt64OrThrow(db_, statement.Get(), 2, static_cast<std::int64_t>(receipt.blockHeight));
+    BindTextOrThrow(db_, statement.Get(), 3, receipt.submittedAtIso8601);
+    BindInt64OrThrow(db_, statement.Get(), 4, static_cast<std::int64_t>(recordId));
 
-    const int code = sqlite3_step(statement);
+    const int code = sqlite3_step(statement.Get());
     ThrowIfSqlError(code, db_, "attach receipt failed");
     const int changes = sqlite3_changes(db_);
-    sqlite3_finalize(statement);
     return changes > 0;
 }
 
@@ -139,13 +155,12 @@ bool SQLiteTelemetryRepository::Delete(std::uint64_t recordId) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     const std::string sql = "DELETE FROM telemetry_records WHERE record_id = ?;";
-    sqlite3_stmt* statement = PrepareOrThrow(db_, sql);
-    BindInt64OrThrow(db_, statement, 1, static_cast<std::int64_t>(recordId));
+    StatementGuard statement(PrepareOrThrow(db_, sql));
+    BindInt64OrThrow(db_, statement.Get(), 1, static_cast<std::int64_t>(recordId));
 
-    const int code = sqlite3_step(statement);
+    const int code = sqlite3_step(statement.Get());
     ThrowIfSqlError(code, db_, "delete telemetry failed");
     const int changes = sqlite3_changes(db_);
-    sqlite3_finalize(statement);
     return changes > 0;
 }
 
@@ -156,17 +171,15 @@ std::optional<TelemetryRecord> SQLiteTelemetryRepository::LatestByDevice(const s
         "SELECT record_id, device_id, timestamp, telemetry_json, hash_hex, signature, pub_key_id, transport, "
         "batch_code, tx_hash, block_height, submitted_at "
         "FROM telemetry_records WHERE device_id = ? ORDER BY timestamp DESC, record_id DESC LIMIT 1;";
-    sqlite3_stmt* statement = PrepareOrThrow(db_, sql);
-    BindTextOrThrow(db_, statement, 1, deviceId);
+    StatementGuard statement(PrepareOrThrow(db_, sql));
+    BindTextOrThrow(db_, statement.Get(), 1, deviceId);
 
-    const int code = sqlite3_step(statement);
+    const int code = sqlite3_step(statement.Get());
     if (code == SQLITE_ROW) {
-        const TelemetryRecord record = RowToRecord(statement);
-        sqlite3_finalize(statement);
+        const TelemetryRecord record = RowToRecord(statement.Get());
         return record;
     }
     ThrowIfSqlError(code, db_, "latest by device query failed");
-    sqlite3_finalize(statement);
     return std::nullopt;
 }
 
@@ -177,17 +190,15 @@ std::optional<TelemetryRecord> SQLiteTelemetryRepository::FindByTransaction(cons
         "SELECT record_id, device_id, timestamp, telemetry_json, hash_hex, signature, pub_key_id, transport, "
         "batch_code, tx_hash, block_height, submitted_at "
         "FROM telemetry_records WHERE tx_hash = ? LIMIT 1;";
-    sqlite3_stmt* statement = PrepareOrThrow(db_, sql);
-    BindTextOrThrow(db_, statement, 1, txHash);
+    StatementGuard statement(PrepareOrThrow(db_, sql));
+    BindTextOrThrow(db_, statement.Get(), 1, txHash);
 
-    const int code = sqlite3_step(statement);
+    const int code = sqlite3_step(statement.Get());
     if (code == SQLITE_ROW) {
-        const TelemetryRecord record = RowToRecord(statement);
-        sqlite3_finalize(statement);
+        const TelemetryRecord record = RowToRecord(statement.Get());
         return record;
     }
     ThrowIfSqlError(code, db_, "find by transaction query failed");
-    sqlite3_finalize(statement);
     return std::nullopt;
 }
 
@@ -199,16 +210,15 @@ std::vector<TelemetryRecord> SQLiteTelemetryRepository::FindByBatch(const std::s
         "SELECT record_id, device_id, timestamp, telemetry_json, hash_hex, signature, pub_key_id, transport, "
         "batch_code, tx_hash, block_height, submitted_at "
         "FROM telemetry_records WHERE batch_code = ? ORDER BY timestamp ASC, record_id ASC;";
-    sqlite3_stmt* statement = PrepareOrThrow(db_, sql);
-    BindTextOrThrow(db_, statement, 1, batchCode);
+    StatementGuard statement(PrepareOrThrow(db_, sql));
+    BindTextOrThrow(db_, statement.Get(), 1, batchCode);
 
-    int code = sqlite3_step(statement);
+    int code = sqlite3_step(statement.Get());
     while (code == SQLITE_ROW) {
-        result.push_back(RowToRecord(statement));
-        code = sqlite3_step(statement);
+        result.push_back(RowToRecord(statement.Get()));
+        code = sqlite3_step(statement.Get());
     }
     ThrowIfSqlError(code, db_, "find by batch query failed");
-    sqlite3_finalize(statement);
     return result;
 }
 
@@ -216,12 +226,11 @@ std::uint64_t SQLiteTelemetryRepository::Size() const {
     std::lock_guard<std::mutex> lock(mutex_);
 
     const std::string sql = "SELECT COUNT(1) FROM telemetry_records;";
-    sqlite3_stmt* statement = PrepareOrThrow(db_, sql);
-    const int code = sqlite3_step(statement);
+    StatementGuard statement(PrepareOrThrow(db_, sql));
+    const int code = sqlite3_step(statement.Get());
     ThrowIfSqlError(code, db_, "size query failed");
 
-    const std::uint64_t count = static_cast<std::uint64_t>(sqlite3_column_int64(statement, 0));
-    sqlite3_finalize(statement);
+    const std::uint64_t count = static_cast<std::uint64_t>(sqlite3_column_int64(statement.Get(), 0));
     return count;
 }
 

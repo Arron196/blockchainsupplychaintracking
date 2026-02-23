@@ -44,6 +44,10 @@ static const uint32_t k_sha256_k[64] = {
 };
 
 static uint32_t rotr32(uint32_t value, uint32_t shift) {
+    if (shift == 0U || shift >= 32U) {
+        return value;
+    }
+
     return (value >> shift) | (value << (32U - shift));
 }
 

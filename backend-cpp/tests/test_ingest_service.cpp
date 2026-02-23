@@ -1,5 +1,6 @@
 #include <cassert>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -128,6 +129,13 @@ agri::TelemetryPacket MakeValidPacket() {
     return packet;
 }
 
+class ThrowingBlockchainClient final : public agri::BlockchainClient {
+   public:
+    agri::BlockchainReceipt SubmitHash(const std::string&, const std::string&, std::uint64_t) override {
+        throw std::runtime_error("simulated blockchain outage");
+    }
+};
+
 void TestAcceptsValidPacket() {
     agri::InMemoryTelemetryRepository repository;
     agri::BasicSignatureVerifier verifier(BuildPublicKeys());
@@ -181,12 +189,25 @@ void TestRejectsInvalidSignature() {
     assert(repository.Size() == 0);
 }
 
+void TestRollsBackStorageOnBlockchainFailure() {
+    agri::InMemoryTelemetryRepository repository;
+    agri::BasicSignatureVerifier verifier(BuildPublicKeys());
+    ThrowingBlockchainClient blockchain;
+    agri::IngestService service(repository, verifier, blockchain);
+
+    const agri::IngestResult result = service.Ingest(MakeValidPacket());
+    assert(!result.accepted);
+    assert(result.message == "blockchain submit failed: simulated blockchain outage");
+    assert(repository.Size() == 0);
+}
+
 }
 
 int main() {
     TestAcceptsValidPacket();
     TestRejectsHashMismatch();
     TestRejectsInvalidSignature();
+    TestRollsBackStorageOnBlockchainFailure();
     std::cout << "test_ingest_service passed" << std::endl;
     return 0;
 }

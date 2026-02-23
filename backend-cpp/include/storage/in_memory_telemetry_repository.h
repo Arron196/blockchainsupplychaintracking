@@ -15,6 +15,7 @@ class InMemoryTelemetryRepository final : public TelemetryRepository {
    public:
     std::uint64_t Save(const TelemetryPacket& packet) override;
     bool AttachReceipt(std::uint64_t recordId, const BlockchainReceipt& receipt) override;
+    bool Delete(std::uint64_t recordId) override;
     std::optional<TelemetryRecord> LatestByDevice(const std::string& deviceId) const override;
     std::optional<TelemetryRecord> FindByTransaction(const std::string& txHash) const override;
     std::vector<TelemetryRecord> FindByBatch(const std::string& batchCode) const override;

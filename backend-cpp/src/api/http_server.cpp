@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <cerrno>
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -116,8 +117,16 @@ std::string ReadHttpRequest(int fd) {
 
 bool SendAll(int fd, const std::string& payload) {
     std::size_t offset = 0;
+    int sendFlags = 0;
+#ifdef MSG_NOSIGNAL
+    sendFlags |= MSG_NOSIGNAL;
+#endif
+
     while (offset < payload.size()) {
-        const ssize_t sent = send(fd, payload.data() + offset, payload.size() - offset, 0);
+        const ssize_t sent = send(fd, payload.data() + offset, payload.size() - offset, sendFlags);
+        if (sent < 0 && errno == EINTR) {
+            continue;
+        }
         if (sent <= 0) {
             return false;
         }

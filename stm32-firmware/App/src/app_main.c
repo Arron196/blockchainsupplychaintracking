@@ -28,6 +28,7 @@ app_main_status_t app_main_prepare_packet(
     char *canonical_output,
     size_t canonical_output_len,
     size_t *canonical_written_len) {
+    uint32_t packet_timestamp_sec;
     sensor_sample_t sample;
     uint8_t digest[SIGNER_SHA256_DIGEST_SIZE];
     uint8_t signature[SIGNER_ECDSA_SIGNATURE_MAX_SIZE];
@@ -46,11 +47,13 @@ app_main_status_t app_main_prepare_packet(
         return APP_MAIN_STATUS_SENSOR_FAILURE;
     }
 
+    packet_timestamp_sec = state->next_timestamp_sec;
+
     if (telemetry_packet_init(
             packet,
             k_default_device_id,
             k_default_pub_key_id,
-            state->next_timestamp_sec,
+            packet_timestamp_sec,
             &sample) != 0) {
         return APP_MAIN_STATUS_PACKET_FAILURE;
     }
@@ -86,7 +89,7 @@ app_main_status_t app_main_prepare_packet(
         return APP_MAIN_STATUS_SIGN_FAILURE;
     }
 
-    state->next_timestamp_sec += 1U;
+    state->next_timestamp_sec = packet_timestamp_sec + 1U;
 
     return APP_MAIN_STATUS_OK;
 }

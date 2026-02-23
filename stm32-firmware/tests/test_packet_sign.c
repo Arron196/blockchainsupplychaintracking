@@ -4,6 +4,9 @@
 #include <string.h>
 
 #include "../App/include/app_main.h"
+#include "../App/include/comm_lora.h"
+#include "../App/include/comm_wifi.h"
+#include "../App/include/sensor_manager.h"
 #include "../App/include/signer.h"
 #include "../App/include/telemetry_packet.h"
 
@@ -72,6 +75,10 @@ static void test_error_paths(void) {
     size_t written_len;
 
     memset(&sample, 0, sizeof(sample));
+    sample.temperature_centi_c = 1234;
+    sample.humidity_centi_pct = 5678;
+    sample.co2_ppm = 910;
+    sample.soil_ph_centi = 345;
 
     assert(telemetry_packet_init(0, "dev", "key", 1U, &sample) == -1);
     assert(telemetry_packet_init(&packet, "", "key", 1U, &sample) == -1);
@@ -88,6 +95,15 @@ static void test_error_paths(void) {
     assert(telemetry_packet_attach_signature(0, 0, 0U) == -1);
     assert(telemetry_packet_attach_signature(&packet, 0, TELEMETRY_SIGNATURE_MAX_SIZE + 1U) == -1);
     assert(telemetry_packet_attach_signature(&packet, 0, 4U) == -1);
+
+    sample.temperature_centi_c = 9000;
+    assert(telemetry_packet_init(&packet, "dev", "key", 1U, &sample) == -1);
+    sample.temperature_centi_c = 1200;
+    sample.humidity_centi_pct = 12000;
+    assert(telemetry_packet_init(&packet, "dev", "key", 1U, &sample) == -1);
+    sample.humidity_centi_pct = 6000;
+    sample.soil_ph_centi = 1900;
+    assert(telemetry_packet_init(&packet, "dev", "key", 1U, &sample) == -1);
 }
 
 static void test_timestamp_advances_only_on_success(void) {
@@ -116,10 +132,90 @@ static void test_timestamp_advances_only_on_success(void) {
     assert(state.next_timestamp_sec == 5001U);
 }
 
+static int mock_sign_digest(
+    const uint8_t digest[SIGNER_SHA256_DIGEST_SIZE],
+    uint8_t *signature,
+    size_t *signature_len,
+    void *context) {
+    size_t i;
+    uint32_t *call_count = (uint32_t *)context;
+
+    if (call_count != 0) {
+        *call_count += 1U;
+    }
+
+    if (*signature_len < SIGNER_SHA256_DIGEST_SIZE) {
+        return -1;
+    }
+
+    for (i = 0U; i < SIGNER_SHA256_DIGEST_SIZE; ++i) {
+        signature[i] = digest[i];
+    }
+    *signature_len = SIGNER_SHA256_DIGEST_SIZE;
+    return 0;
+}
+
+static void test_signer_backend_integration(void) {
+    signer_backend_t backend;
+    uint8_t digest[SIGNER_SHA256_DIGEST_SIZE];
+    uint8_t signature[SIGNER_ECDSA_SIGNATURE_MAX_SIZE];
+    size_t signature_len;
+    uint32_t call_count;
+    size_t i;
+
+    for (i = 0U; i < SIGNER_SHA256_DIGEST_SIZE; ++i) {
+        digest[i] = (uint8_t)i;
+    }
+
+    signer_init();
+    signature_len = sizeof(signature);
+    assert(signer_sign_digest(digest, signature, &signature_len) == SIGNER_STATUS_BACKEND_NOT_CONFIGURED);
+
+    call_count = 0U;
+    backend.sign_digest = mock_sign_digest;
+    backend.context = &call_count;
+    signer_set_backend(backend);
+
+    signature_len = sizeof(signature);
+    assert(signer_sign_digest(digest, signature, &signature_len) == SIGNER_STATUS_OK);
+    assert(signature_len == SIGNER_SHA256_DIGEST_SIZE);
+    assert(call_count == 1U);
+    assert(memcmp(signature, digest, SIGNER_SHA256_DIGEST_SIZE) == 0);
+
+    signer_init();
+    signature_len = sizeof(signature);
+    assert(signer_sign_digest(digest, signature, &signature_len) == SIGNER_STATUS_BACKEND_NOT_CONFIGURED);
+}
+
+static void test_sensor_manager_and_transport_stubs(void) {
+    sensor_manager_t manager;
+    sensor_sample_t first;
+    sensor_sample_t second;
+    uint8_t payload[3] = {0x01U, 0x02U, 0x03U};
+
+    assert(sensor_manager_read(0, &first) == -1);
+    assert(sensor_manager_read(&manager, 0) == -1);
+
+    sensor_manager_init(&manager);
+    assert(sensor_manager_read(&manager, &first) == 0);
+    assert(sensor_manager_read(&manager, &second) == 0);
+    assert(second.temperature_centi_c != first.temperature_centi_c);
+    assert(second.humidity_centi_pct != first.humidity_centi_pct);
+
+    assert(comm_wifi_send(0, 0U) == COMM_STATUS_INVALID_ARGUMENT);
+    assert(comm_lora_send(0, 0U) == COMM_STATUS_INVALID_ARGUMENT);
+    assert(comm_wifi_send(payload, sizeof(payload)) == COMM_STATUS_NOT_READY);
+    assert(comm_lora_send(payload, sizeof(payload)) == COMM_STATUS_NOT_READY);
+    assert(strcmp(comm_wifi_name(), "wifi") == 0);
+    assert(strcmp(comm_lora_name(), "lora") == 0);
+}
+
 int main(void) {
     test_deterministic_canonical_and_hash();
     test_error_paths();
     test_timestamp_advances_only_on_success();
+    test_signer_backend_integration();
+    test_sensor_manager_and_transport_stubs();
 
     return 0;
 }

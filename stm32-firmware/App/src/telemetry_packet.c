@@ -4,6 +4,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#define TELEMETRY_TEMP_CENTI_MIN (-5000)
+#define TELEMETRY_TEMP_CENTI_MAX (8500)
+#define TELEMETRY_HUMIDITY_CENTI_MAX (10000U)
+#define TELEMETRY_CO2_PPM_MAX (100000U)
+#define TELEMETRY_SOIL_PH_CENTI_MAX (1400U)
+
 int telemetry_packet_init(
     telemetry_packet_t *packet,
     const char *device_id,
@@ -23,6 +29,14 @@ int telemetry_packet_init(
         pub_key_id_len == 0U ||
         device_id_len > TELEMETRY_DEVICE_ID_MAX_LEN ||
         pub_key_id_len > TELEMETRY_PUB_KEY_ID_MAX_LEN) {
+        return -1;
+    }
+
+    if (sample->temperature_centi_c < TELEMETRY_TEMP_CENTI_MIN ||
+        sample->temperature_centi_c > TELEMETRY_TEMP_CENTI_MAX ||
+        sample->humidity_centi_pct > TELEMETRY_HUMIDITY_CENTI_MAX ||
+        sample->co2_ppm > TELEMETRY_CO2_PPM_MAX ||
+        sample->soil_ph_centi > TELEMETRY_SOIL_PH_CENTI_MAX) {
         return -1;
     }
 

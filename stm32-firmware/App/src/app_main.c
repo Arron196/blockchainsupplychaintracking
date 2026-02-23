@@ -106,5 +106,9 @@ comm_status_t app_main_send_canonical(
         return comm_wifi_send((const uint8_t *)payload, payload_len);
     }
 
-    return comm_lora_send((const uint8_t *)payload, payload_len);
+    if (state->transport == APP_TRANSPORT_LORA) {
+        return comm_lora_send((const uint8_t *)payload, payload_len);
+    }
+
+    return COMM_STATUS_INVALID_ARGUMENT;
 }

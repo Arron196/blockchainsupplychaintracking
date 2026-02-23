@@ -32,6 +32,10 @@ static void test_deterministic_canonical_and_hash(void) {
     char digest_hex[(SIGNER_SHA256_DIGEST_SIZE * 2U) + 1U];
     const char *expected_canonical =
         "stm32-001|1700000000|{\"temperatureCenti\":2356,\"humidityCenti\":4512,\"co2ppm\":604,\"soilPhCenti\":678}";
+    /*
+     * SHA-256 for expected_canonical verified independently with:
+     * printf '%s' "stm32-001|1700000000|{\"temperatureCenti\":2356,\"humidityCenti\":4512,\"co2ppm\":604,\"soilPhCenti\":678}" | sha256sum
+     */
     const char *expected_sha256 =
         "b71d6654c6ee410ae230564df2118d43b49539fc55c227aa441514c0bebadcaa";
 

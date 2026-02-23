@@ -1,6 +1,7 @@
 #include "blockchain/blockchain_client.h"
 
 #include <arpa/inet.h>
+#include <cerrno>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -14,7 +15,9 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
+#include <utility>
 
 #include "transport/json_parser.h"
 #include "utils/hash_utils.h"
@@ -22,6 +25,36 @@
 namespace agri {
 
 namespace {
+
+constexpr std::uint32_t kRpcHttpMaxAttempts = 3;
+constexpr std::uint32_t kRpcRetryDelayMs = 100;
+constexpr std::size_t kRpcErrorPreviewLimit = 768;
+constexpr char kRpcHttpStatusPrefix[] = "rpc http status ";
+
+enum class RpcFailureType {
+    ResolveHost,
+    Connect,
+    Send,
+    Read,
+    InvalidResponse,
+    InvalidStatusLine,
+    HttpStatus
+};
+
+class RpcTransportError final : public std::runtime_error {
+   public:
+    RpcTransportError(RpcFailureType type, std::string message, int httpStatusCode = 0)
+        : std::runtime_error(std::move(message)),
+          type_(type),
+          httpStatusCode_(httpStatusCode) {}
+
+    RpcFailureType type() const { return type_; }
+    int httpStatusCode() const { return httpStatusCode_; }
+
+   private:
+    RpcFailureType type_;
+    int httpStatusCode_;
+};
 
 struct ParsedHttpUrl {
     std::string host;
@@ -66,12 +99,42 @@ std::string ReadSocketFully(int socketFd) {
 
     while (true) {
         const ssize_t received = recv(socketFd, buffer, sizeof(buffer), 0);
-        if (received <= 0) {
+        if (received == 0) {
             break;
+        }
+        if (received < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            throw RpcTransportError(RpcFailureType::Read, "failed to read rpc response");
         }
         response.append(buffer, static_cast<std::size_t>(received));
     }
     return response;
+}
+
+void SendAll(int socketFd, std::string_view data) {
+    std::size_t sentBytes = 0;
+
+#if defined(MSG_NOSIGNAL)
+    constexpr int sendFlags = MSG_NOSIGNAL;
+#else
+    constexpr int sendFlags = 0;
+#endif
+
+    while (sentBytes < data.size()) {
+        const ssize_t sent = send(socketFd, data.data() + sentBytes, data.size() - sentBytes, sendFlags);
+        if (sent < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            throw RpcTransportError(RpcFailureType::Send, "failed to send rpc request");
+        }
+        if (sent == 0) {
+            throw RpcTransportError(RpcFailureType::Send, "failed to send rpc request");
+        }
+        sentBytes += static_cast<std::size_t>(sent);
+    }
 }
 
 std::string HttpPostJson(const std::string& url, const std::string& payload) {
@@ -91,7 +154,7 @@ std::string HttpPostJson(const std::string& url, const std::string& payload) {
         &hints,
         &result);
     if (resolveCode != 0 || result == nullptr) {
-        throw std::runtime_error("cannot resolve rpc host");
+        throw RpcTransportError(RpcFailureType::ResolveHost, "cannot resolve rpc host");
     }
 
     int socketFd = -1;
@@ -109,7 +172,7 @@ std::string HttpPostJson(const std::string& url, const std::string& payload) {
     freeaddrinfo(result);
 
     if (socketFd < 0) {
-        throw std::runtime_error("cannot connect to rpc endpoint");
+        throw RpcTransportError(RpcFailureType::Connect, "cannot connect to rpc endpoint");
     }
 
     std::ostringstream request;
@@ -121,31 +184,35 @@ std::string HttpPostJson(const std::string& url, const std::string& payload) {
             << payload;
     const std::string requestText = request.str();
 
-    const ssize_t sent = send(socketFd, requestText.data(), requestText.size(), 0);
-    if (sent < 0 || static_cast<std::size_t>(sent) != requestText.size()) {
+    std::string response;
+    try {
+        SendAll(socketFd, requestText);
+        response = ReadSocketFully(socketFd);
+    } catch (...) {
         close(socketFd);
-        throw std::runtime_error("failed to send rpc request");
+        throw;
     }
-
-    const std::string response = ReadSocketFully(socketFd);
     close(socketFd);
 
     const std::size_t headerEnd = response.find("\r\n\r\n");
     if (headerEnd == std::string::npos) {
-        throw std::runtime_error("invalid rpc response");
+        throw RpcTransportError(RpcFailureType::InvalidResponse, "invalid rpc response");
     }
 
     const std::string statusLine = response.substr(0, response.find("\r\n"));
     const std::regex statusPattern("HTTP/1\\.[01]\\s+([0-9]{3})");
     std::smatch statusMatch;
     if (!std::regex_search(statusLine, statusMatch, statusPattern)) {
-        throw std::runtime_error("invalid rpc status line");
+        throw RpcTransportError(RpcFailureType::InvalidStatusLine, "invalid rpc status line");
     }
 
     const int statusCode = std::stoi(statusMatch[1].str());
     const std::string body = response.substr(headerEnd + 4);
     if (statusCode < 200 || statusCode >= 300) {
-        throw std::runtime_error("rpc http status " + std::to_string(statusCode));
+        throw RpcTransportError(
+            RpcFailureType::HttpStatus,
+            std::string(kRpcHttpStatusPrefix) + std::to_string(statusCode),
+            statusCode);
     }
     return body;
 }
@@ -177,14 +244,90 @@ std::optional<std::uint64_t> ParseHexNumber(std::string_view hexValue) {
     }
 }
 
+std::optional<std::int64_t> ExtractJsonIntegerField(const std::string& json, const std::string& fieldName) {
+    const std::regex pattern("\\\"" + fieldName + "\\\"\\s*:\\s*(-?[0-9]+)");
+    std::smatch match;
+    if (!std::regex_search(json, match, pattern)) {
+        return std::nullopt;
+    }
+    try {
+        return std::stoll(match[1].str());
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 std::string ExtractRpcError(const std::string& json) {
-    const auto message = ExtractJsonStringField(json, "message");
-    return message.value_or("unknown rpc error");
+    const std::size_t errorPos = json.find("\"error\"");
+    if (errorPos == std::string::npos) {
+        return "unknown rpc error";
+    }
+
+    const std::string errorJson = json.substr(errorPos, kRpcErrorPreviewLimit);
+    const auto code = ExtractJsonIntegerField(errorJson, "code");
+    const auto message = ExtractJsonStringField(errorJson, "message");
+    const auto data = ExtractJsonStringField(errorJson, "data");
+
+    std::string decoded;
+    if (code.has_value()) {
+        decoded = "rpc error " + std::to_string(*code);
+        if (message.has_value() && !message->empty()) {
+            decoded += ": " + *message;
+        }
+    } else if (message.has_value() && !message->empty()) {
+        decoded = *message;
+    } else {
+        decoded = "unknown rpc error";
+    }
+
+    if (data.has_value() && !data->empty()) {
+        decoded += " (" + *data + ")";
+    }
+    return decoded;
 }
 
 bool IsReceiptNull(const std::string& body) {
     const std::regex pattern("\\\"result\\\"\\s*:\\s*null");
     return std::regex_search(body, pattern);
+}
+
+bool IsTransientRpcFailure(const RpcTransportError& error) {
+    switch (error.type()) {
+        case RpcFailureType::Connect:
+        case RpcFailureType::Send:
+        case RpcFailureType::Read:
+        case RpcFailureType::InvalidResponse:
+        case RpcFailureType::InvalidStatusLine:
+            return true;
+        case RpcFailureType::HttpStatus:
+            return error.httpStatusCode() >= 500;
+        case RpcFailureType::ResolveHost:
+            return false;
+        default:
+            return false;
+    }
+}
+
+std::string HttpPostJsonWithRetry(const std::string& url, const std::string& payload) {
+    RpcTransportError lastError(RpcFailureType::Connect, "rpc retry loop exhausted");
+
+    for (std::uint32_t attempt = 1; attempt <= kRpcHttpMaxAttempts; ++attempt) {
+        try {
+            return HttpPostJson(url, payload);
+        } catch (const RpcTransportError& error) {
+            lastError = error;
+
+            if (!IsTransientRpcFailure(error)) {
+                throw;
+            }
+            if (attempt == kRpcHttpMaxAttempts) {
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(kRpcRetryDelayMs));
+        }
+    }
+
+    throw lastError;
 }
 
 }  
@@ -220,7 +363,7 @@ BlockchainReceipt EthereumRpcBlockchainClient::SubmitHash(
                   << "\"id\":1"
                   << "}";
 
-    const std::string sendTxResponse = HttpPostJson(config_.rpcUrl, sendTxPayload.str());
+    const std::string sendTxResponse = HttpPostJsonWithRetry(config_.rpcUrl, sendTxPayload.str());
     if (sendTxResponse.find("\"error\"") != std::string::npos) {
         throw std::runtime_error(ExtractRpcError(sendTxResponse));
     }
@@ -244,7 +387,7 @@ BlockchainReceipt EthereumRpcBlockchainClient::SubmitHash(
                        << "\"id\":2"
                        << "}";
 
-        const std::string receiptResponse = HttpPostJson(config_.rpcUrl, receiptPayload.str());
+        const std::string receiptResponse = HttpPostJsonWithRetry(config_.rpcUrl, receiptPayload.str());
         if (receiptResponse.find("\"error\"") != std::string::npos) {
             throw std::runtime_error(ExtractRpcError(receiptResponse));
         }

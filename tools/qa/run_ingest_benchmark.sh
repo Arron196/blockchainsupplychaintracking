@@ -50,8 +50,10 @@ for required in cmake curl python3; do
   fi
 done
 
-openssl ecparam -name prime256v1 -genkey -noout -out "${PRIVATE_KEY_PATH}"
-openssl ec -in "${PRIVATE_KEY_PATH}" -pubout -out "${PUBLIC_KEY_PATH}"
+if [[ ! -f "${PRIVATE_KEY_PATH}" || ! -f "${PUBLIC_KEY_PATH}" ]]; then
+  openssl ecparam -name prime256v1 -genkey -noout -out "${PRIVATE_KEY_PATH}"
+  openssl ec -in "${PRIVATE_KEY_PATH}" -pubout -out "${PUBLIC_KEY_PATH}"
+fi
 
 cmake -S "${BACKEND_DIR}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_OpenSSL=FALSE -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build "${BUILD_DIR}" --config Release --target agri_gateway

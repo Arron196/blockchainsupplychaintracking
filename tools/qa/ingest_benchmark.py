@@ -14,6 +14,15 @@ from pathlib import Path
 from typing import Any
 
 
+def default_output_path() -> str:
+    return f"tools/qa/artifacts/ingest_run_{time.strftime('%Y%m%d_%H%M%S')}.json"
+
+
+def ensure_openssl_available() -> None:
+    if subprocess.run(["openssl", "version"], capture_output=True, check=False).returncode != 0:
+        raise RuntimeError("openssl command is unavailable or not functional")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Measure ingest success rate and latency against backend-cpp.",
@@ -29,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-sec", type=float, default=3.0, help="HTTP timeout per request")
     parser.add_argument(
         "--output",
-        default="tools/qa/artifacts/ingest_mock_baseline.json",
+        default=default_output_path(),
         help="Output JSON artifact path",
     )
     parser.add_argument(
@@ -53,9 +62,6 @@ def percentile(sorted_values: list[float], p: float) -> float:
 
 
 def sign_hash_hex(hash_hex: str, private_key_path: Path) -> str:
-    if subprocess.run(["openssl", "version"], capture_output=True, check=False).returncode != 0:
-        raise RuntimeError("openssl command is unavailable or not functional")
-
     # Default mode keeps parity with current backend contract where the hash hex text
     # itself is passed into DigestSign/DigestVerify. A protocol upgrade can switch to
     # raw hash bytes on both producer and verifier together.
@@ -144,6 +150,8 @@ def main() -> int:
     private_key_path = Path(args.private_key)
     if not private_key_path.exists():
         raise FileNotFoundError(f"private key not found: {private_key_path}")
+
+    ensure_openssl_available()
 
     ingest_url = f"{args.base_url.rstrip('/')}/api/v1/ingest"
     metrics_url = f"{args.base_url.rstrip('/')}/api/v1/metrics/overview"

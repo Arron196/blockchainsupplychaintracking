@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TelemetryPacket",
+  "type": "object",
+  "required": [
+    "deviceId",
+    "timestamp",
+    "telemetry",
+    "hash",
+    "signature"
+  ],
+  "properties": {
+    "deviceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["number", "string", "boolean"]
+      }
+    },
+    "hash": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pubKeyId": {
+      "type": "string"
+    },
+    "transport": {
+      "type": "string",
+      "enum": ["wifi", "lora"]
+    }
+  }
+}

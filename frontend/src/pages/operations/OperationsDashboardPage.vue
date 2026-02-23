@@ -137,9 +137,6 @@ const alertItems = computed(() =>
   alertUpdates.value.slice(0, 8).map((event) => `${event.deviceId} rejected: ${event.message}`)
 );
 
-const templateBindings = { EventFeed, MetricCard, formatSocketState, telemetryItems, alertItems };
-void templateBindings;
-
 const loadMetrics = async (): Promise<void> => {
   loading.value = true;
   loadError.value = null;
@@ -172,6 +169,7 @@ onUnmounted(() => {
   }
   telemetrySocket?.close();
   alertSocket?.close();
+  alertSocket = null;
 });
 </script>
 

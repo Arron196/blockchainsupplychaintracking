@@ -11,9 +11,6 @@ const renderTime = (timestamp: number): string => {
   const normalized = looksLikeMilliseconds ? timestamp : timestamp * 1000;
   return new Date(normalized).toLocaleString();
 };
-
-const templateBindings = { renderTime };
-void templateBindings;
 </script>
 
 <template>

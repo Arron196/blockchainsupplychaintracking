@@ -56,6 +56,9 @@ def sign_hash_hex(hash_hex: str, private_key_path: Path) -> str:
     if subprocess.run(["openssl", "version"], capture_output=True, check=False).returncode != 0:
         raise RuntimeError("openssl command is unavailable or not functional")
 
+    # Default mode keeps parity with current backend contract where the hash hex text
+    # itself is passed into DigestSign/DigestVerify. A protocol upgrade can switch to
+    # raw hash bytes on both producer and verifier together.
     result = subprocess.run(
         ["openssl", "dgst", "-sha256", "-sign", str(private_key_path), "-binary"],
         input=hash_hex.encode("utf-8"),
@@ -152,7 +155,7 @@ def main() -> int:
     for index in range(args.requests):
         payload = build_packet(index, args.base_timestamp, private_key_path)
         status, response_json, latency_ms = post_json(ingest_url, payload, args.timeout_sec)
-        accepted = status == 202 and bool(response_json.get("accepted") is True)
+        accepted = status == 202 and response_json.get("accepted") is True
         if accepted:
             accepted_count += 1
         latencies.append(latency_ms)

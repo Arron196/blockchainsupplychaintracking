@@ -43,6 +43,13 @@ if ! command -v openssl >/dev/null 2>&1; then
   exit 1
 fi
 
+for required in cmake curl python3; do
+  if ! command -v "${required}" >/dev/null 2>&1; then
+    echo "${required} is required to run ingest benchmark" >&2
+    exit 1
+  fi
+done
+
 openssl ecparam -name prime256v1 -genkey -noout -out "${PRIVATE_KEY_PATH}"
 openssl ec -in "${PRIVATE_KEY_PATH}" -pubout -out "${PUBLIC_KEY_PATH}"
 

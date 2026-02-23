@@ -35,6 +35,13 @@ Default artifact path:
 
 - `tools/qa/artifacts/ingest_run_<timestamp>.json`
 
+Notes:
+
+- Runner generates ephemeral key material per run under `tools/qa/artifacts/keys/`.
+- Signing currently uses the hash hex text for parity with the gateway's current
+  verify contract; raw-byte signing should be introduced only with coordinated
+  backend+producer protocol update.
+
 The JSON artifact includes:
 
 - workload parameters

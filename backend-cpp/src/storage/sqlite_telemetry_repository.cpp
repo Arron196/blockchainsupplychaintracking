@@ -135,6 +135,20 @@ bool SQLiteTelemetryRepository::AttachReceipt(std::uint64_t recordId, const Bloc
     return changes > 0;
 }
 
+bool SQLiteTelemetryRepository::Delete(std::uint64_t recordId) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    const std::string sql = "DELETE FROM telemetry_records WHERE record_id = ?;";
+    sqlite3_stmt* statement = PrepareOrThrow(db_, sql);
+    BindInt64OrThrow(db_, statement, 1, static_cast<std::int64_t>(recordId));
+
+    const int code = sqlite3_step(statement);
+    ThrowIfSqlError(code, db_, "delete telemetry failed");
+    const int changes = sqlite3_changes(db_);
+    sqlite3_finalize(statement);
+    return changes > 0;
+}
+
 std::optional<TelemetryRecord> SQLiteTelemetryRepository::LatestByDevice(const std::string& deviceId) const {
     std::lock_guard<std::mutex> lock(mutex_);
 

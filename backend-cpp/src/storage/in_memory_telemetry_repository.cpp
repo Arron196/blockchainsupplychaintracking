@@ -1,5 +1,7 @@
 #include "storage/in_memory_telemetry_repository.h"
 
+#include <algorithm>
+
 namespace agri {
 
 std::uint64_t InMemoryTelemetryRepository::Save(const TelemetryPacket& packet) {
@@ -29,6 +31,50 @@ bool InMemoryTelemetryRepository::AttachReceipt(std::uint64_t recordId, const Bl
 
     records_[positionIt->second].receipt = receipt;
     recordIdByTxHash_[receipt.txHash] = recordId;
+    return true;
+}
+
+bool InMemoryTelemetryRepository::Delete(std::uint64_t recordId) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto positionIt = positionById_.find(recordId);
+    if (positionIt == positionById_.end()) {
+        return false;
+    }
+
+    const std::size_t position = positionIt->second;
+    const TelemetryRecord& record = records_[position];
+
+    auto eraseRecordId = [recordId](std::vector<std::uint64_t>* ids) {
+        ids->erase(std::remove(ids->begin(), ids->end(), recordId), ids->end());
+    };
+
+    if (const auto deviceIt = recordIdsByDevice_.find(record.packet.deviceId); deviceIt != recordIdsByDevice_.end()) {
+        eraseRecordId(&deviceIt->second);
+        if (deviceIt->second.empty()) {
+            recordIdsByDevice_.erase(deviceIt);
+        }
+    }
+
+    if (!record.packet.batchCode.empty()) {
+        if (const auto batchIt = recordIdsByBatch_.find(record.packet.batchCode); batchIt != recordIdsByBatch_.end()) {
+            eraseRecordId(&batchIt->second);
+            if (batchIt->second.empty()) {
+                recordIdsByBatch_.erase(batchIt);
+            }
+        }
+    }
+
+    if (record.receipt.has_value()) {
+        recordIdByTxHash_.erase(record.receipt->txHash);
+    }
+
+    records_.erase(records_.begin() + static_cast<std::ptrdiff_t>(position));
+    positionById_.erase(positionIt);
+
+    for (std::size_t i = position; i < records_.size(); ++i) {
+        positionById_[records_[i].recordId] = i;
+    }
+
     return true;
 }
 

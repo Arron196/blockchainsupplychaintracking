@@ -70,14 +70,20 @@ IngestResult IngestService::Ingest(const TelemetryPacket& packet) {
     try {
         const BlockchainReceipt receipt =
             blockchainClient_.SubmitHash(packet.hashHex, packet.deviceId, packet.timestamp);
-        repository_.AttachReceipt(recordId, receipt);
+        if (!repository_.AttachReceipt(recordId, receipt)) {
+            repository_.Delete(recordId);
+            finishWith(false, "receipt persistence failed");
+            return result;
+        }
         result.receipt = receipt;
         finishWith(true, "accepted");
         return result;
     } catch (const std::exception& ex) {
+        repository_.Delete(recordId);
         finishWith(false, std::string("blockchain submit failed: ") + ex.what());
         return result;
     } catch (...) {
+        repository_.Delete(recordId);
         finishWith(false, "blockchain submit failed: unknown error");
         return result;
     }

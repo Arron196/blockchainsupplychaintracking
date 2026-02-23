@@ -54,6 +54,10 @@ void TestSqliteRepositoryRoundTrip() {
     assert(byBatch.size() == 1);
     assert(byBatch[0].recordId == recordId);
 
+    assert(repository.Delete(recordId));
+    assert(repository.Size() == 0);
+    assert(!repository.Delete(recordId));
+
     fs::remove(dbPath, ec);
 }
 
